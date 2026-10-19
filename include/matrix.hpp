@@ -171,4 +171,27 @@ auto mul_col_prior(const mul_cfg<T>& cfg) -> void {
 }
 
 template <typename T>
+auto mul(const mul_cfg<T>& cfg) -> void {
+	/*
+	* in this function we are calculating the whole column of the next matrix
+	* and after calculating this column we are going to the next row and in the 
+	* same way we are calculating the next column of out matrix
+	*/
+
+	for (int i = 0; i < cfg.m1.rows_; ++i) {
+		
+		for (int j = 0; j < cfg.m2.rows_; ++j) {
+			auto calc_row = cfg.out->data_[cfg.out->cols_ * i];
+			auto scalar = cfg.m1.data_[cfg.m1.cols_ * i + j];
+			
+			for (int k = 0; k < cfg.m2.cols_; ++k) {
+				auto m2_row_data = cfg.m2.data_[cfg.m2.cols_ * j + k];
+				cfg.out->data_[calc_row + k] =+ scalar * m2_row_data;
+			}
+		}
+	}
+
+}
+
+template <typename T>
 auto mul_multithread(const mul_cfg<T>& cfg) -> void;

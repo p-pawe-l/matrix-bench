@@ -1,4 +1,4 @@
-# matrix_comp
+# matrix-bench
 
 Benchmarks different ways of multiplying dense square matrices in C++20.
 

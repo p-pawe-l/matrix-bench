@@ -9,7 +9,7 @@ struct bench_result {
     unsigned long row_prior_mul;
     unsigned long col_prior_mul;
     unsigned long mul;
-    unsigned long multithread_mul = 0;
+    unsigned long multithread_mul;
 };
 
 auto mes_time(const std::function<void()>& f) -> unsigned long;
@@ -24,6 +24,7 @@ auto bench_matrix_mul(const mul_cfg<T>& cfg) -> bench_result {
     return {
         .row_prior_mul = mes_time([&] { mul_row_prior<T>(cfg); }),
         .col_prior_mul = mes_time([&] { mul_col_prior<T>(cfg); }),
+        .multithread_mul = mes_time([&] { mul_multithread<T>(cfg); }),
         .mul = mes_time([&] { mul<T>(cfg); }),
     };
 }

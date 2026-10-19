@@ -3,12 +3,15 @@
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
+#include <latch>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <type_traits>
 #include <vector>
 #include <initializer_list>
+#include <utility>
 
 template <typename T>
 struct Matrix {
@@ -110,6 +113,21 @@ auto print_matrix(const Matrix<T>& m, std::ostream& os = std::cout,
 	}
 }
 
+template <typename T> struct mul_cfg;
+
+template <typename T>
+auto thread_task(int row_id, const mul_cfg<T>& cfg) -> void {
+	auto calc_row = cfg.out->cols_ * row_id;
+	
+	for (int j = 0; j < cfg.m2.rows_; ++j) {
+		auto scalar = cfg.m1.data_[cfg.m1.cols_ * row_id + j];
+		
+		for (int k = 0; k < cfg.m2.cols_; ++k) {
+			auto m2_row_data = cfg.m2.data_[cfg.m2.cols_ * j + k];
+			cfg.out->data_[calc_row + k] += scalar * m2_row_data;
+		}
+	}
+}
 
 template <typename T>
 struct mul_cfg {
@@ -117,8 +135,39 @@ struct mul_cfg {
 	Matrix<T> m2;
 	Matrix<T> *out;
 
-	// Not needed for non multithreaded mul operations
-	std::vector<std::thread> threads_;
+	// Not needed for non multithreaded mul operations.
+	// Threads are created here and block on start_ until mul_multithread releases them.
+	// mutable so mul_multithread can drive them through a const cfg
+	mutable std::vector<std::thread> threads_;
+	mutable std::latch start_{1};
+	mutable bool started_ = false;
+	bool cancelled_ = false;
+
+	mul_cfg(Matrix<T> m1, Matrix<T> m2, Matrix<T>* out)
+		: m1(std::move(m1)), m2(std::move(m2)), out(out) {
+		threads_.reserve(this->m1.rows_);
+		for (int i = 0; i < this->m1.rows_; ++i) {
+			threads_.emplace_back([this, i] {
+				start_.wait();
+				if (!cancelled_) thread_task<T>(i, *this);
+			});
+		}
+	}
+
+	// Threads hold `this`, so the cfg must stay in place.
+	mul_cfg(const mul_cfg&) = delete;
+	mul_cfg& operator=(const mul_cfg&) = delete;
+
+	~mul_cfg() {
+		if (!started_) {
+			// mul_multithread never ran: wake threads and let them exit without work
+			cancelled_ = true;
+			start_.count_down();
+		}
+		for (auto& t : threads_) {
+			if (t.joinable()) t.join();
+		}
+	}
 };
 
 template <typename T>
@@ -133,7 +182,6 @@ auto mul_row_prior(const mul_cfg<T>& cfg) -> void {
 		
 		for (int j = 0; j < cfg.m2.cols_; ++j) {
 			auto calc_index = cfg.out->cols_ * i + j;
-			cfg.out->data_[calc_index] = 0;
 			
 			for (int z = 0; z < cfg.m1.cols_; ++z) {
 				auto m1_row_data = cfg.m1.data_[cfg.m1.cols_ * i + z];
@@ -157,7 +205,6 @@ auto mul_col_prior(const mul_cfg<T>& cfg) -> void {
 		
 		for (int j = 0; j < cfg.m1.rows_; ++j) {
 			auto calc_index = cfg.out->cols_ * j + i;
-			cfg.out->data_[calc_index] = 0;
 			
 			for (int z = 0; z < cfg.m1.cols_; ++z) {
 				auto m1_row_data = cfg.m1.data_[cfg.m1.cols_ * j + z];
@@ -181,12 +228,12 @@ auto mul(const mul_cfg<T>& cfg) -> void {
 	for (int i = 0; i < cfg.m1.rows_; ++i) {
 		
 		for (int j = 0; j < cfg.m2.rows_; ++j) {
-			auto calc_row = cfg.out->data_[cfg.out->cols_ * i];
+			auto calc_row = cfg.out->cols_ * i;
 			auto scalar = cfg.m1.data_[cfg.m1.cols_ * i + j];
 			
 			for (int k = 0; k < cfg.m2.cols_; ++k) {
 				auto m2_row_data = cfg.m2.data_[cfg.m2.cols_ * j + k];
-				cfg.out->data_[calc_row + k] =+ scalar * m2_row_data;
+				cfg.out->data_[calc_row + k] += scalar * m2_row_data;
 			}
 		}
 	}
@@ -194,4 +241,14 @@ auto mul(const mul_cfg<T>& cfg) -> void {
 }
 
 template <typename T>
-auto mul_multithread(const mul_cfg<T>& cfg) -> void;
+auto mul_multithread(const mul_cfg<T>& cfg) -> void {
+    // Threads are one-shot: they were created in the cfg constructor
+    if (cfg.started_)
+        throw std::logic_error("mul_multithread can only run once per mul_cfg");
+    cfg.started_ = true;
+    cfg.start_.count_down();
+
+    for (auto& t : cfg.threads_) {
+        t.join();
+    }
+}

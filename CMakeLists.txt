@@ -7,7 +7,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Threads REQUIRED)
 
 add_library(matrix_comp_lib STATIC
-    src/matrix.cpp
     src/benchmark.cpp
 )
 target_include_directories(matrix_comp_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

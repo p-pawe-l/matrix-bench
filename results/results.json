@@ -1,0 +1,10 @@
+{
+  "unit": "ms",
+  "results": [
+    {"n": 128, "row_prior_mul": 4, "col_prior_mul": 4, "multithread_mul": 1, "mul": 0},
+    {"n": 256, "row_prior_mul": 27, "col_prior_mul": 21, "multithread_mul": 1, "mul": 2},
+    {"n": 512, "row_prior_mul": 152, "col_prior_mul": 154, "multithread_mul": 7, "mul": 18},
+    {"n": 1024, "row_prior_mul": 1418, "col_prior_mul": 1426, "multithread_mul": 43, "mul": 154},
+    {"n": 2024, "row_prior_mul": 10540, "col_prior_mul": 9870, "multithread_mul": 546, "mul": 1228}
+  ]
+}
